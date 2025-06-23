@@ -11,7 +11,8 @@
 
 param(
     [string]$Path = ".",
-    [switch]$Recurse
+    [switch]$Recurse,
+    [switch]$DryRun
 )
 
 # 1 ─ settings ─────────────────────────────────────────────
@@ -37,9 +38,13 @@ foreach ($f in $all) {
 
 function Move-File($src, $dstDir) {
     if (-not (Test-Path $src)) { return $null }        # already moved
-    if (-not (Test-Path $dstDir)) { New-Item -ItemType Directory -Path $dstDir -Force | Out-Null }
+    if (-not (Test-Path $dstDir)) {
+        if ($DryRun) { Write-Host "[DRYRUN] mkdir $dstDir" } else { New-Item -ItemType Directory -Path $dstDir -Force | Out-Null }
+    }
     $dst = Join-Path $dstDir ([IO.Path]::GetFileName($src))
-    if ($src -ne $dst) { Move-Item $src $dst -Force }
+    if ($src -ne $dst) {
+        if ($DryRun) { Write-Host "[DRYRUN] move $src -> $dst" } else { Move-Item $src $dst -Force }
+    }
     return $dst
 }
 
@@ -68,27 +73,41 @@ foreach ($pair in $groups.GetEnumerator()) {
     foreach ($c in $cueFixList) {
         if (-not (Test-Path $c.Path)) { continue }
         $dir = Split-Path $c.Path -Parent
-        (Get-Content $c.Path) |
-        ForEach-Object {
-            if ($_ -match '^\s*FILE\s+"([^"]+)"') {
-                $srcT = Join-Path $c.OrigDir $Matches[1]
-                $dstT = Move-File $srcT $dir
-                'FILE "' + ([IO.Path]::GetFileName($dstT)) + '" BINARY'
-            } else { $_ }
-        } | Set-Content $c.Path
+        $newContent = (Get-Content $c.Path) |
+            ForEach-Object {
+                if ($_ -match '^\s*FILE\s+"([^"]+)"') {
+                    $srcT = Join-Path $c.OrigDir $Matches[1]
+                    $dstT = Move-File $srcT $dir
+                    'FILE "' + ([IO.Path]::GetFileName($dstT)) + '" BINARY'
+                } else { $_ }
+            }
+        if ($DryRun) {
+            Write-Host "[DRYRUN] update $($c.Path)" -fg Yellow
+        } else {
+            $newContent | Set-Content $c.Path
+        }
     }
 
     # write playlist only if multi-disc
     if ($masters.Count -gt 1) {
         $m3u = Join-Path $gDir "$game.m3u"
-        ($masters | Sort-Object FullName | ForEach-Object { [IO.Path]::GetFileName($_.Name) }) |
-            Set-Content $m3u
-        $playlists += $m3u
-        Write-Host "   ✔  m3u → $game\$game.m3u" -fg Green
+        $content = $masters | Sort-Object FullName | ForEach-Object { [IO.Path]::GetFileName($_.Name) }
+        if ($DryRun) {
+            Write-Host "[DRYRUN] create $game\$game.m3u" -fg Yellow
+        } else {
+            $content | Set-Content $m3u
+            $playlists += $m3u
+            Write-Host "   ✔  m3u → $game\$game.m3u" -fg Green
+        }
     }
 }
 
 Write-Host "`nOrganise phase complete." -fg Cyan
+
+if ($DryRun) {
+    Write-Host "`nDry run - skipping audit." -fg Cyan
+    return
+}
 
 # 4 ─ audit ─────────────────────────────────────────────
 Write-Host "`n=== AUDIT REPORT ===" -fg Magenta
