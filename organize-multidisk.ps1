@@ -45,9 +45,10 @@ $TagRx    = '(?i)[\s\-_]*(?:[\(\[\{]?)(?:disc|disk|cd|d|part|p|track)[\s\-_]*(?:
 # ─────────────────────────────────────────────────────────
 
 if (-not (Test-Path $Path)) { throw "Path '$Path' does not exist." }
-Write-Host "`nScanning '$Path' …" -fg Cyan
+$RootPath = (Get-Item -LiteralPath $Path).FullName
+Write-Host "`nScanning '$RootPath' …" -fg Cyan
 
-$all = Get-ChildItem -Path $Path -File -Recurse:$Recurse |
+$all = Get-ChildItem -Path $RootPath -File -Recurse:$Recurse |
        Where-Object { $ExtAll -contains $_.Extension.ToLower() } |
        Sort-Object FullName
 Write-Host "Found $($all.Count) disc-related files" -fg Yellow
@@ -109,19 +110,24 @@ function Repair-Playlists($root) {
 # 3 ─ organise every set ───────────────────────────────
 foreach ($pair in $groups.GetEnumerator()) {
 
-    $game    = $pair.Key
-    $files   = $pair.Value
-    $rootDir = $files[0].Directory.FullName
-    $gDir    = Join-Path $rootDir $game
+    $game  = $pair.Key
+    $files = $pair.Value
 
     # master= cue / iso / img / chd (bins & wavs are data tracks)
     $masters = $files | Where-Object { $_.Extension -match '\.(cue|iso|img|chd)$' }
+
+    $targetDir = if ($masters.Count -gt 1) {
+        Join-Path $RootPath $game
+    } else {
+        $RootPath
+    }
+    $origDirs = $files | ForEach-Object { $_.Directory.FullName } | Sort-Object -Unique
 
     Write-Host "→ $game  [$($masters.Count) disc(s)]" -fg Cyan
 
     $cueFixList = @()
     foreach ($f in $files) {
-        $moved = Move-File $f.FullName $gDir
+        $moved = Move-File $f.FullName $targetDir
         if ($moved -and $f.Extension -ieq ".cue") { $cueFixList += @{Path=$moved;OrigDir=$f.Directory.FullName} }
     }
 
@@ -146,7 +152,7 @@ foreach ($pair in $groups.GetEnumerator()) {
 
     # write playlist only if multi-disc
     if ($masters.Count -gt 1) {
-        $m3u = Join-Path $gDir "$game.m3u"
+        $m3u = Join-Path $targetDir "$game.m3u"
         $content = $masters | Sort-Object FullName | ForEach-Object { [IO.Path]::GetFileName($_.Name) }
         if ($DryRun) {
             Write-Host "[DRYRUN] create $game\$game.m3u" -fg Yellow
@@ -155,12 +161,31 @@ foreach ($pair in $groups.GetEnumerator()) {
             $playlists += $m3u
             Write-Host "   ✔  m3u → $game\$game.m3u" -fg Green
         }
+    } else {
+        $p1 = Join-Path $RootPath "$game.m3u"
+        $p2 = Join-Path (Join-Path $RootPath $game) "$game.m3u"
+        foreach ($p in @($p1,$p2)) {
+            if (Test-Path $p) {
+                if ($DryRun) { Write-Host "[DRYRUN] remove $p" -fg Yellow }
+                else { Remove-Item $p -Force }
+            }
+        }
+    }
+
+    foreach ($d in $origDirs) {
+        if ($d -eq $targetDir) { continue }
+        if (Test-Path $d) {
+            if ((Get-ChildItem -Path $d -Force | Measure-Object).Count -eq 0) {
+                if ($DryRun) { Write-Host "[DRYRUN] rmdir $d" -fg Yellow }
+                else { Remove-Item $d -Force -Recurse }
+            }
+        }
     }
 }
 
 Write-Host "`nOrganise phase complete." -fg Cyan
 
-Repair-Playlists $Path
+Repair-Playlists $RootPath
 
 if ($DryRun) {
     Write-Host "`nDry run - skipping audit." -fg Cyan

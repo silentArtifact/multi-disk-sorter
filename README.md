@@ -35,8 +35,8 @@ pwsh ./organize-multidisk.ps1 -Path '/mnt/dumps' -Recurse
 ## What the script does
 
 1. Scans for supported image files and groups them by base game title (removing `Disc`, `CD`, `Part`, etc.).
-2. Moves every disc file into a new `<Game>` directory and fixes any `FILE` lines inside moved `.cue` files.
-3. Creates a `<Game>.m3u` playlist inside the folder whenever there are multiple master images and fixes any broken playlists it finds.
+2. Places multi-disc games in a `<Game>` directory (single-disc titles remain in the root) and fixes any `FILE` lines inside moved `.cue` files.
+3. Creates a `<Game>.m3u` playlist whenever there are multiple master images and fixes any broken playlists it finds. Playlists for single-disc games are removed.
 4. Runs an audit reporting `OK`, `WARN` or `FAIL` for each playlist and cue file so you can verify integrity.
 
 After the audit completes the console will display `Done.`
