@@ -7,8 +7,9 @@ The script scans a directory for disc images (cue, iso, img, chd, bin, wav
 or pbp) and groups them by base game title. Each set is moved to a new
 "<Game>" directory, cue sheets are updated so their FILE entries point to the
 local files, and a <Game>.m3u playlist is generated when multiple master discs
-are detected. After organizing, an audit reports `OK`, `WARN` or `FAIL` for
-each playlist and cue file so you can verify integrity.
+are detected. Existing playlists are checked for mistakes and corrected, and an
+audit reports `OK`, `WARN` or `FAIL` for each playlist and cue file so you can
+verify integrity.
 
 .PARAMETER Path
 Root directory containing the disc images. Defaults to the current directory.
@@ -73,6 +74,38 @@ function Move-File($src, $dstDir) {
 
 $playlists = @()
 
+function Repair-Playlists($root) {
+    Write-Host "`nChecking playlists …" -fg Cyan
+    $list = Get-ChildItem -Path $root -Filter *.m3u -File -Recurse:$Recurse |
+            Sort-Object FullName
+    foreach ($p in $list) {
+        $base = [IO.Path]::GetFileNameWithoutExtension($p.Name)
+        $dir  = $p.Directory.FullName
+        if ($p.Directory.Name -ne $base -and (Test-Path (Join-Path $dir $base))) {
+            $p = Move-File $p.FullName (Join-Path $dir $base)
+        } else {
+            $p = $p.FullName
+        }
+        $gdir    = Split-Path $p -Parent
+        $masters = Get-ChildItem -Path $gdir -File |
+                   Where-Object { $_.Extension -match '\.(cue|iso|img|chd)$' }
+        if ($masters.Count -lt 2) {
+            if ($DryRun) { Write-Host "[DRYRUN] remove $p" -fg Yellow }
+            else { Remove-Item $p -Force }
+            continue
+        }
+        $expected = $masters | Sort-Object Name | ForEach-Object { $_.Name }
+        $current  = Get-Content $p 2>$null
+        $needFix  = ($expected.Count -ne $current.Count) -or
+                    (Compare-Object $expected $current)
+        if ($needFix) {
+            if ($DryRun) { Write-Host "[DRYRUN] update $p" -fg Yellow }
+            else { $expected | Set-Content $p }
+        }
+        $script:playlists += $p
+    }
+}
+
 # 3 ─ organise every set ───────────────────────────────
 foreach ($pair in $groups.GetEnumerator()) {
 
@@ -126,6 +159,8 @@ foreach ($pair in $groups.GetEnumerator()) {
 }
 
 Write-Host "`nOrganise phase complete." -fg Cyan
+
+Repair-Playlists $Path
 
 if ($DryRun) {
     Write-Host "`nDry run - skipping audit." -fg Cyan
