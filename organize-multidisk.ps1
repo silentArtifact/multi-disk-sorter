@@ -1,12 +1,35 @@
 <#
-  Organize-MultiDisc.ps1  – v3.1 (NextUI layout, Track-aware, idempotent)
+.SYNOPSIS
+Organizes multi-disc game dumps into tidy, playlist-ready folders.
 
-  • Groups dumps by base title, stripping Disc/CD/Part/Track markers.
-  • Moves every file into "<Game>\" (no dot-prefix – NextUI rule).
-  • Fixes FILE lines in each moved .cue so they point to local bin/wav.
-  • Creates <Game>.m3u **inside** the folder when there are ≥ 2 discs.
-  • Supports cue / iso / img / chd / bin / wav / pbp.
-  • Post-audit: OK / WARN / FAIL for playlists & cue integrity.
+.DESCRIPTION
+The script scans a directory for disc images (cue, iso, img, chd, bin, wav
+or pbp) and groups them by base game title. Each set is moved to a new
+"<Game>" directory, cue sheets are updated so their FILE entries point to the
+local files, and a <Game>.m3u playlist is generated when multiple master discs
+are detected. After organizing, an audit reports `OK`, `WARN` or `FAIL` for
+each playlist and cue file so you can verify integrity.
+
+.PARAMETER Path
+Root directory containing the disc images. Defaults to the current directory.
+
+.PARAMETER Recurse
+Recursively search subdirectories for supported files.
+
+.PARAMETER DryRun
+Show the operations that would be performed without making changes.
+
+.EXAMPLE
+# Organize the current directory
+./organize-multidisk.ps1
+
+.EXAMPLE
+# Process a custom path and include subfolders
+./organize-multidisk.ps1 -Path 'D:\Rips' -Recurse
+
+.EXAMPLE
+# Preview the actions without touching the filesystem
+./organize-multidisk.ps1 -DryRun
 #>
 
 param(
