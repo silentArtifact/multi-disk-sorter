@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
 Organizes multi-disc game dumps into tidy, playlist-ready folders.
