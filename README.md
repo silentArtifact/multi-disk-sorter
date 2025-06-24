@@ -24,7 +24,12 @@ The optional `-Path` parameter specifies the directory to process. `-Recurse` te
 
 # Process the folder and all of its subdirectories
 ./organize-multidisk.ps1 -Path 'D:\Rips' -Recurse
+
+# Preview the actions without touching the filesystem
+./organize-multidisk.ps1 -DryRun
 ```
+
+The `-DryRun` switch shows what would change without modifying anything.
 
 On non-Windows systems you can call it with `pwsh`:
 
