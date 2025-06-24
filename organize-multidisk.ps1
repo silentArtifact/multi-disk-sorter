@@ -42,7 +42,7 @@ param(
 
 # 1 ─ settings ─────────────────────────────────────────────
 $ExtAll   = ".cue", ".iso", ".img", ".chd", ".bin", ".wav", ".pbp"
-$TagRx    = '(?i)(?:^|[\s\-_\(\[\{])(disc|disk|cd|d|part|p|track)[\s\-_]*(?:([0-9]{1,2}|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve))(?:[\)\]\}]?)'
+$TagRx    = '(?i)(?:^|[\s\-_\(\[\{])(disc|disk|cd|d|part|p|track)[\s\-_]*([0-9]{1,2}|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?:[\)\]\}]|\b)'
 # ─────────────────────────────────────────────────────────
 
 if (-not (Test-Path -LiteralPath $Path)) { throw "Path '$Path' does not exist." }
