@@ -65,7 +65,7 @@ function Move-File($src, $dstDir) {
     if (-not (Test-Path -LiteralPath $src)) { return $null }        # already moved
     if (-not (Test-Path -LiteralPath $dstDir)) {
         if ($DryRun) { Write-Host "[DRYRUN] mkdir $dstDir" }
-        else { New-Item -ItemType Directory -LiteralPath $dstDir -Force | Out-Null }
+        else { New-Item -ItemType Directory -Path $dstDir -Force | Out-Null }
     }
     $dst = Join-Path $dstDir ([IO.Path]::GetFileName($src))
     if ($src -ne $dst) {
