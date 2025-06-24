@@ -44,11 +44,11 @@ $ExtAll   = ".cue", ".iso", ".img", ".chd", ".bin", ".wav", ".pbp"
 $TagRx    = '(?i)[\s\-_]*(?:[\(\[\{]?)(?:disc|disk|cd|d|part|p|track)[\s\-_]*(?:([0-9]{1,2}|[ivxlcdm]+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve))(?:[\)\]\}]?)'
 # ─────────────────────────────────────────────────────────
 
-if (-not (Test-Path $Path)) { throw "Path '$Path' does not exist." }
+if (-not (Test-Path -LiteralPath $Path)) { throw "Path '$Path' does not exist." }
 $RootPath = (Get-Item -LiteralPath $Path).FullName
 Write-Host "`nScanning '$RootPath' …" -fg Cyan
 
-$all = Get-ChildItem -Path $RootPath -File -Recurse:$Recurse |
+$all = Get-ChildItem -LiteralPath $RootPath -File -Recurse:$Recurse |
        Where-Object { $ExtAll -contains $_.Extension.ToLower() } |
        Sort-Object FullName
 Write-Host "Found $($all.Count) disc-related files" -fg Yellow
@@ -62,13 +62,15 @@ foreach ($f in $all) {
 }
 
 function Move-File($src, $dstDir) {
-    if (-not (Test-Path $src)) { return $null }        # already moved
-    if (-not (Test-Path $dstDir)) {
-        if ($DryRun) { Write-Host "[DRYRUN] mkdir $dstDir" } else { New-Item -ItemType Directory -Path $dstDir -Force | Out-Null }
+    if (-not (Test-Path -LiteralPath $src)) { return $null }        # already moved
+    if (-not (Test-Path -LiteralPath $dstDir)) {
+        if ($DryRun) { Write-Host "[DRYRUN] mkdir $dstDir" }
+        else { New-Item -ItemType Directory -LiteralPath $dstDir -Force | Out-Null }
     }
     $dst = Join-Path $dstDir ([IO.Path]::GetFileName($src))
     if ($src -ne $dst) {
-        if ($DryRun) { Write-Host "[DRYRUN] move $src -> $dst" } else { Move-Item $src $dst -Force }
+        if ($DryRun) { Write-Host "[DRYRUN] move $src -> $dst" }
+        else { Move-Item -LiteralPath $src -Destination $dst -Force }
     }
     return $dst
 }
@@ -77,31 +79,31 @@ $playlists = @()
 
 function Repair-Playlists($root) {
     Write-Host "`nChecking playlists …" -fg Cyan
-    $list = Get-ChildItem -Path $root -Filter *.m3u -File -Recurse:$Recurse |
+    $list = Get-ChildItem -LiteralPath $root -Filter *.m3u -File -Recurse:$Recurse |
             Sort-Object FullName
     foreach ($p in $list) {
         $base = [IO.Path]::GetFileNameWithoutExtension($p.Name)
         $dir  = $p.Directory.FullName
-        if ($p.Directory.Name -ne $base -and (Test-Path (Join-Path $dir $base))) {
+        if ($p.Directory.Name -ne $base -and (Test-Path -LiteralPath (Join-Path $dir $base))) {
             $p = Move-File $p.FullName (Join-Path $dir $base)
         } else {
             $p = $p.FullName
         }
         $gdir    = Split-Path $p -Parent
-        $masters = Get-ChildItem -Path $gdir -File |
+        $masters = Get-ChildItem -LiteralPath $gdir -File |
                    Where-Object { $_.Extension -match '\.(cue|iso|img|chd)$' }
         if ($masters.Count -lt 2) {
             if ($DryRun) { Write-Host "[DRYRUN] remove $p" -fg Yellow }
-            else { Remove-Item $p -Force }
+            else { Remove-Item -LiteralPath $p -Force }
             continue
         }
         $expected = $masters | Sort-Object Name | ForEach-Object { $_.Name }
-        $current  = Get-Content $p 2>$null
+        $current  = Get-Content -LiteralPath $p 2>$null
         $needFix  = ($expected.Count -ne $current.Count) -or
                     (Compare-Object $expected $current)
         if ($needFix) {
             if ($DryRun) { Write-Host "[DRYRUN] update $p" -fg Yellow }
-            else { $expected | Set-Content $p }
+            else { $expected | Set-Content -LiteralPath $p }
         }
         $script:playlists += $p
     }
@@ -133,9 +135,9 @@ foreach ($pair in $groups.GetEnumerator()) {
 
     # fix cue FILE targets
     foreach ($c in $cueFixList) {
-        if (-not (Test-Path $c.Path)) { continue }
+        if (-not (Test-Path -LiteralPath $c.Path)) { continue }
         $dir = Split-Path $c.Path -Parent
-        $newContent = (Get-Content $c.Path) |
+        $newContent = (Get-Content -LiteralPath $c.Path) |
             ForEach-Object {
                 if ($_ -match '^\s*FILE\s+"([^"]+)"') {
                     $srcT = Join-Path $c.OrigDir $Matches[1]
@@ -146,7 +148,7 @@ foreach ($pair in $groups.GetEnumerator()) {
         if ($DryRun) {
             Write-Host "[DRYRUN] update $($c.Path)" -fg Yellow
         } else {
-            $newContent | Set-Content $c.Path
+            $newContent | Set-Content -LiteralPath $c.Path
         }
     }
 
@@ -157,7 +159,7 @@ foreach ($pair in $groups.GetEnumerator()) {
         if ($DryRun) {
             Write-Host "[DRYRUN] create $game\$game.m3u" -fg Yellow
         } else {
-            $content | Set-Content $m3u
+            $content | Set-Content -LiteralPath $m3u
             $playlists += $m3u
             Write-Host "   ✔  m3u → $game\$game.m3u" -fg Green
         }
@@ -165,19 +167,19 @@ foreach ($pair in $groups.GetEnumerator()) {
         $p1 = Join-Path $RootPath "$game.m3u"
         $p2 = Join-Path (Join-Path $RootPath $game) "$game.m3u"
         foreach ($p in @($p1,$p2)) {
-            if (Test-Path $p) {
+            if (Test-Path -LiteralPath $p) {
                 if ($DryRun) { Write-Host "[DRYRUN] remove $p" -fg Yellow }
-                else { Remove-Item $p -Force }
+                else { Remove-Item -LiteralPath $p -Force }
             }
         }
     }
 
     foreach ($d in $origDirs) {
         if ($d -eq $targetDir) { continue }
-        if (Test-Path $d) {
-            if ((Get-ChildItem -Path $d -Force | Measure-Object).Count -eq 0) {
+        if (Test-Path -LiteralPath $d) {
+            if ((Get-ChildItem -LiteralPath $d -Force | Measure-Object).Count -eq 0) {
                 if ($DryRun) { Write-Host "[DRYRUN] rmdir $d" -fg Yellow }
-                else { Remove-Item $d -Force -Recurse }
+                else { Remove-Item -LiteralPath $d -Force -Recurse }
             }
         }
     }
@@ -197,25 +199,25 @@ Write-Host "`n=== AUDIT REPORT ===" -fg Magenta
 
 function Check-Cue($cue){
     $bad = 0; $d = Split-Path $cue -Parent
-    Get-Content $cue | ForEach-Object {
+    Get-Content -LiteralPath $cue | ForEach-Object {
         if ($_ -match '^\s*FILE\s+"([^"]+)"') {
-            if (-not (Test-Path (Join-Path $d $Matches[1]))) { $bad++ }
+            if (-not (Test-Path -LiteralPath (Join-Path $d $Matches[1]))) { $bad++ }
         }
     }; return $bad
 }
 
 foreach ($pl in $playlists) {
-    if (-not (Test-Path $pl)) { Write-Host "FAIL  (playlist missing)  $pl" -fg Red; continue }
+    if (-not (Test-Path -LiteralPath $pl)) { Write-Host "FAIL  (playlist missing)  $pl" -fg Red; continue }
 
-    $raw = Get-Content $pl -Raw
+    $raw = Get-Content -LiteralPath $pl -Raw
     if ($raw -notmatch "`r?`n") { Write-Host "FAIL  $(Split-Path $pl -Leaf)  (no line breaks)" -fg Red; continue }
 
-    $entries   = Get-Content $pl
+    $entries   = Get-Content -LiteralPath $pl
     $missing   = 0
     $cueErrors = 0
     foreach ($rel in $entries) {
         $abs = Join-Path (Split-Path $pl -Parent) $rel
-        if (-not (Test-Path $abs)) { $missing++ ; continue }
+        if (-not (Test-Path -LiteralPath $abs)) { $missing++ ; continue }
         if ($abs -like "*.cue") { $cueErrors += Check-Cue $abs }
     }
 
